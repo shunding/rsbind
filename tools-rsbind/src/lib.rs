@@ -13,6 +13,8 @@ extern crate toml;
 extern crate zip;
 #[macro_use]
 extern crate error_chain;
+#[macro_use]
+extern crate genco;
 
 mod android;
 mod ast;

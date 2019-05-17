@@ -1,4 +1,5 @@
 use super::dest;
+use super::dest_new::StructGen;
 use ast::AstResult;
 use bridges::BridgeGen::JavaGen;
 use bridge::prj::Unpack;
@@ -250,6 +251,18 @@ impl<'a> BuildProcess for AndroidProcess<'a> {
         )
         .gen_bridges()
         .unwrap();
+
+        for (_key, struct_descs) in self.ast_result.struct_descs.iter() {
+            for struct_desc in struct_descs.iter() {
+                let gen = StructGen {
+                    desc: struct_desc,
+                    pkg: self.namespace()
+                };
+
+                let struct_str = gen.gen().unwrap();
+                println!("{}", struct_str);
+            }
+        }
 
         let _ = Command::new("cargo")
             .arg("fmt")

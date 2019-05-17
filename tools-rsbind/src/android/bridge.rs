@@ -19,7 +19,7 @@ pub(crate) fn new_gen<'a>(
     imp_desc: &'a Vec<ImpDesc>,
     java_namespace: &'a str,
 ) -> BridgeFileGen<'a, JniFileGenStrategy<'a>> {
-    return BridgeFileGen {
+    BridgeFileGen {
         out_dir,
         trait_descs,
         struct_descs,
@@ -30,7 +30,7 @@ pub(crate) fn new_gen<'a>(
                 java_namespace: java_namespace.to_owned(),
             },
         },
-    };
+    }
 }
 
 pub(crate) struct JniFileGenStrategy<'a> {

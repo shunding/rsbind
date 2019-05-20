@@ -7,7 +7,6 @@ use genco::IntoTokens;
 use genco::Formatter;
 use genco::Custom;
 use std::fmt::Write;
-use std::collections::HashMap;
 
 pub(crate) struct StructGen<'a> {
     pub desc: &'a StructDesc,
@@ -21,16 +20,7 @@ impl<'a> StructGen<'a> {
         class.implements.push(java::imported("java.io", "Serializable"));
         
         for field in self.desc.fields.iter() {
-            let mut java_field = match field.ty {
-                AstType::Boolean => Field::new(java::BOOLEAN, field.name.clone()),
-                AstType::Byte => Field::new(java::BYTE, field.name.clone()),
-                AstType::Int => Field::new(java::INTEGER, field.name.clone()),
-                AstType::Long => Field::new(java::LONG, field.name.clone()),
-                AstType::Float => Field::new(java::FLOAT, field.name.clone()),
-                AstType::Double => Field::new(java::DOUBLE, field.name.clone()),
-                AstType::String => Field::new(java::imported("java.lang", "String"), field.name.clone()),
-                _ => Field::new(java::VOID, field.name.clone())
-            };
+            let mut java_field = Field::new(Java::from(field.ty), field.name.clone());
             java_field.modifiers = vec![Modifier::Public];
             class.fields.push(java_field);
         }
@@ -38,18 +28,19 @@ impl<'a> StructGen<'a> {
         let mut buf = String::new();
         {
             let mut formatter = Formatter::new(&mut buf);
-            let mut extra = java::Extra::new(self.pkg.as_ref());
-            java::Java::write_file(class.into_tokens(), &mut formatter, &mut extra, 1)?;
+            let mut extra = java::Extra::default();
+            extra.package(self.pkg.as_ref());
+            java::Java::write_file(class.into_tokens(), &mut formatter, &mut extra, 0)?;
         }
 
         Ok(buf)
     }
 }
 
-// pub(crate) struct CallbackGen<'a> {
-//     pub desc: &'a TraitDesc,
-//     pub pkg: String
-// }
+pub(crate) struct CallbackGen<'a> {
+    pub desc: &'a TraitDesc,
+    pub pkg: String
+}
 
 // impl<'a> CallbackGen<'a> {
 //     pub(crate) fn gen(&self) -> Result<String> {
@@ -62,7 +53,21 @@ impl<'a> StructGen<'a> {
 //         for method in self.desc.methods.iter() {
 //             let mut m = Method::new(method.name.clone());
 //             m.modifiers = vec![Modifier::Abstract];
-//             m.returns = 
+//             m.returns = Java::from(method.return_type);
+//             for arg in method.args.iter() {
+//                 let arg_ty = match arg.ty {
+//                     AstType::Struct => java::imported(self.pkg, arg.name),
+//                     AstType::Vec(base) => {
+//                         if base == AstBaseType::Struct {
+//                             let sub_ty = std::str::replace(arg.origin_ty, "Vec<");
+//                             let sub_ty = std::str::replace(arg.origin_ty, ">");
+//                             let  java::imported(self.pkg, sub_ty);
+//                         } else {
+
+//                         }
+//                     }
+//                 }
+//             }
 //             interface.methods.push();
 //         }
 
@@ -71,22 +76,34 @@ impl<'a> StructGen<'a> {
 //     }
 // }
 
-// impl From<AstType> for Java<'static> {
-//     fn from(item: AstType) -> Self {
-//         match item {
-//             AstType::Boolean => java::BOOLEAN,
-//             AstType::Byte => java::BYTE,
-//             AstType::Int => java::INTEGER,
-//             AstType::Long => java::LONG,
-//             AstType::Float => java::FLOAT,
-//             AstType::Double => java::DOUBLE,
-//             AstType::String => java::imported("java.lang", "String"),
-//             AstType::Vec(base) => {
-//                 java::local(name: N)
-//             }
-//             AstType::Void 
-//             | AstType::Callback 
-//             | AstType::Struct => java::VOID
-//         }
-//     }
-// }
+impl From<AstType> for Java<'static> {
+    fn from(item: AstType) -> Self {
+        match item {
+            AstType::Boolean => java::BOOLEAN,
+            AstType::Byte => java::BYTE,
+            AstType::Int => java::INTEGER,
+            AstType::Long => java::LONG,
+            AstType::Float => java::FLOAT,
+            AstType::Double => java::DOUBLE,
+            AstType::String => java::imported("java.lang", "String"),
+            AstType::Vec(base) => AstType::from(base).to_array(),
+            AstType::Void 
+            | AstType::Callback 
+            | AstType::Struct => java::VOID
+        }
+    }
+}
+
+impl AstType {
+    fn to_array(&self) -> Java<'static> {
+        let base_name = Java::from(self.clone());
+        let mut base_str = String::new();
+        {
+            let mut formatter = Formatter::new(&mut base_str);
+            let mut extra = java::Extra::default();
+            base_name.format(&mut formatter, &mut extra, 0);
+        }
+        base_str.write_str("[]");
+        java::local(base_str) 
+    }
+}

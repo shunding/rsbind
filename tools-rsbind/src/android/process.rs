@@ -264,6 +264,37 @@ impl<'a> BuildProcess for AndroidProcess<'a> {
             }
         }
 
+        use super::dest_new::CallbackGen;
+        use super::dest_new::TraitGen;
+        for desc in self.ast_result.trait_descs.iter() {
+            let descs = desc.1;
+            for each in descs.iter() {
+                if !each.is_callback {
+                    let gen = TraitGen{
+                        desc: each,
+                        pkg: self.namespace(),
+                        so_name: "ffi.so".to_owned(),
+                        ext_libs: "xxxx.so".to_owned(),
+                        callbacks: vec![]
+                    };
+                    let strs = gen.gen().unwrap();
+                    println!("{}", strs);
+                    continue;
+                }
+
+                let gen = CallbackGen {
+                    desc: each,
+                    pkg: self.namespace()
+                };
+
+                let callback_str = gen.gen();
+                match callback_str {
+                    Ok(str) => println!("{}", str),
+                    Err(err) => println!("{}", err)
+                }
+            }
+        }
+
         let _ = Command::new("cargo")
             .arg("fmt")
             .current_dir(&self.bridge_prj_path)

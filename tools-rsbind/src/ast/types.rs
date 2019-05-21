@@ -3,7 +3,7 @@ use std::convert::From;
 ///
 /// Ast types are bridges between rust origin types and C/Swift/Java types.
 ///
-#[derive(Debug, Clone, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq)]
 pub(crate) enum AstBaseType {
     Void,
     Byte,
@@ -39,7 +39,7 @@ impl From<String> for AstBaseType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq)]
 pub(crate) enum AstType {
     Void,
     Byte,

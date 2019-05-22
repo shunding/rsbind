@@ -1,28 +1,31 @@
-use errors::*;
 use ast::contract::desc::StructDesc;
 use ast::contract::desc::TraitDesc;
-use ast::types::AstType;
 use ast::types::AstBaseType;
+use ast::types::AstType;
+use errors::*;
 use genco::java::{self, *};
-use genco::IntoTokens;
-use genco::Formatter;
 use genco::Custom;
+use genco::Formatter;
+use genco::IntoTokens;
 use genco::Tokens;
 use std::fmt::Write;
 
 pub(crate) struct StructGen<'a> {
     pub desc: &'a StructDesc,
-    pub pkg: String
+    pub pkg: String,
 }
 
 impl<'a> StructGen<'a> {
     pub(crate) fn gen(&self) -> Result<String> {
         let mut class = Class::new(self.desc.name.clone());
         class.modifiers.push(Modifier::Public);
-        class.implements.push(java::imported("java.io", "Serializable"));
-        
+        class
+            .implements
+            .push(java::imported("java.io", "Serializable"));
+
         for field in self.desc.fields.iter() {
-            let mut java_field = Field::new(Java::from(field.ty), field.name.clone());
+            let field_ty = JavaType::new(field.ty, self.pkg.clone(), field.origin_ty.clone());
+            let mut java_field = Field::new(Java::from(field_ty), field.name.clone());
             java_field.modifiers = vec![Modifier::Public];
             class.fields.push(java_field);
         }
@@ -33,7 +36,7 @@ impl<'a> StructGen<'a> {
 
 pub(crate) struct CallbackGen<'a> {
     pub desc: &'a TraitDesc,
-    pub pkg: String
+    pub pkg: String,
 }
 
 impl<'a> CallbackGen<'a> {
@@ -45,28 +48,17 @@ impl<'a> CallbackGen<'a> {
         for method in self.desc.methods.iter() {
             let mut m = Method::new(method.name.clone());
             m.modifiers = vec![];
-            m.returns = match method.return_type {
-                AstType::Struct => {
-                    java::imported(self.pkg.as_ref(), method.origin_return_ty.as_ref())
-                }
-                _ => {
-                    Java::from(method.return_type)
-                }
-            };
+            m.returns = Java::from(JavaType::new(
+                method.return_type,
+                self.pkg.clone(),
+                method.origin_return_ty.clone(),
+            ));
             for arg in method.args.iter() {
-                let arg_ty = match arg.ty {
-                    AstType::Struct => java::imported(self.pkg.as_ref(), arg.name.as_ref()),
-                    AstType::Vec(base) => {
-                        match base {
-                            AstBaseType::Struct => {
-                                let sub_ty = arg.origin_ty.replace("Vec<", "").replace(">", "");
-                                java::imported(self.pkg.as_ref(), sub_ty)
-                            }
-                            _ => Java::from(arg.ty)
-                        }
-                    }
-                    _ => Java::from(arg.ty)
-                };
+                let arg_ty = Java::from(JavaType::new(
+                    arg.ty,
+                    self.pkg.clone(),
+                    arg.origin_ty.clone(),
+                ));
                 let mut argument = java::Argument::new(arg_ty, arg.name.as_ref());
                 argument.modifiers = vec![];
 
@@ -84,14 +76,16 @@ pub(crate) struct TraitGen<'a> {
     pub pkg: String,
     pub so_name: String,
     pub ext_libs: String,
-    pub callbacks: Vec<TraitDesc>
+    pub callbacks: Vec<TraitDesc>,
 }
 
 impl<'a> TraitGen<'a> {
     pub(crate) fn gen(&self) -> Result<String> {
         let mut class = Class::new(self.desc.name.clone());
         class.modifiers = vec![Modifier::Public];
-        class.implements.push(java::imported("java.io", "Serializable"));
+        class
+            .implements
+            .push(java::imported("java.io", "Serializable"));
 
         let mut body = Tokens::new();
         body.push("static {");
@@ -107,7 +101,10 @@ impl<'a> TraitGen<'a> {
         body.push("}");
         class.body = body;
 
-        let mut index_field = Field::new(java::imported("java.util.concurrent.atomic", "AtomicLong"), "globalIndex");
+        let mut index_field = Field::new(
+            java::imported("java.util.concurrent.atomic", "AtomicLong"),
+            "globalIndex",
+        );
         index_field.initializer("new AtomicLong(0)");
         index_field.modifiers = vec![Modifier::Private, Modifier::Static];
         class.fields.push(index_field);
@@ -127,57 +124,94 @@ impl<'a> TraitGen<'a> {
 
         let mut sel_callbacks = vec![];
 
-        for method in self.desc.methods.iter() {
-            let mut m = java::Method::new(method.name.as_ref());
+        let methods = self.desc.methods.clone();
+        let methods = methods.into_iter();
+        for method in methods {
+            let mut m = java::Method::new(method.name.clone());
             m.modifiers = vec![Modifier::Public, Modifier::Static];
-            match method.return_type {
-                AstType::Void => (),
-                AstType::Struct => {
-                    m.returns = java::imported(self.pkg.as_ref(), method.origin_return_ty.clone());
-                }
-                AstType::Vec(_) => {
-                    m.returns = Java::from(method.return_type);
-                }
-                _ => { 
-                    m.returns = method.return_type.into();
-                }
-            }
+            m.returns = Java::from(JavaType::new(
+                method.return_type.clone(),
+                self.pkg.clone(),
+                method.origin_return_ty.clone(),
+            ));
 
-            for arg in method.args.iter() {
+            let mut method_body: Tokens<Java> = Tokens::new();
+            for arg in method.args.into_iter() {
+                // Add arguments
                 match arg.ty {
                     AstType::Void => (),
-                    AstType::Callback => {
-                        let argument = Argument::new(java::imported(self.pkg.as_ref(), arg.origin_ty.as_ref()), arg.name.as_ref());
+                    _ => {
+                        let java =
+                            JavaType::new(arg.ty.clone(), self.pkg.clone(), arg.origin_ty.clone());
+                        let mut argument = Argument::new(java, arg.name.clone());
+                        argument.modifiers = vec![];
                         m.arguments.push(argument);
-                        let callback = self.callbacks.iter()
+                    }
+                }
+
+                // Select the callbacks in arguments
+                match arg.ty {
+                    AstType::Callback => {
+                        let callback = self
+                            .callbacks
+                            .iter()
                             .filter(|callback| callback.name == arg.origin_ty)
                             .collect::<Vec<&TraitDesc>>();
                         if callback.len() > 0 && sel_callbacks.contains(&callback[0]) {
                             sel_callbacks.push(callback[0]);
                         }
                     }
+                    _ => (),
+                }
+
+                // Argument convert
+                let converted = format!("r_{}", &arg.name);
+                match arg.ty {
+                    AstType::Void => (),
+                    AstType::Callback => {
+                        let index_name = format!("{}_callback_index", &arg.name);
+                        method_body.push(toks!("long ", index_name.clone(), " = globalIndex.incrementAndGet()", ";"));
+                        method_body.push(toks!("globalCallbacks.put(", index_name.clone(), ",", arg.name.clone(), ");"));
+                        method_body.push(toks!("long ", converted.clone(), " = ", index_name.clone(), ";"));
+                    }
+                    AstType::Boolean => {
+                        method_body.push(toks!("int ", converted.clone(), " = ", arg.name.clone(), " ? 1 : 0;"));
+                    }
                     AstType::Vec(base) => {
                         match base {
                             AstBaseType::Byte => {
-                                let argument = Argument::new(Java::from(arg.ty), arg.name.as_ref());
-                                m.arguments.push(argument);
-                            }
-                            AstBaseType::Struct => {
-                                let argument = Argument::new(arg.ty.to_struct_array(self.pkg.as_ref(), arg.origin_ty.as_ref()), arg.name.as_ref());
-                                m.arguments.push(argument); 
+                                let java = JavaType::new(arg.ty.clone(), self.pkg.clone(), arg.origin_ty.clone());
+                                let java = Java::from(java);
+                                method_body.push(toks!(java, " ", converted.clone(),  " = ", arg.name.clone(), ";"));
                             }
                             _ => {
-                                let argument = Argument::new(arg.ty.to_boxed_array(), arg.name.as_ref());
-                                m.arguments.push(argument);              
+                                let json_cls = java::imported("com.alibaba.fastjson", "JSON");
+                                method_body.push(toks!("String ", converted.clone(), " = ", json_cls, ".toJSONString(", arg.name.clone(), ");"));
                             }
                         }
                     }
                     _ => {
-                        let argument = Argument::new(Java::from(arg.ty), arg.name.as_ref());
-                        m.arguments.push(argument);
+                        let java = JavaType::new(arg.ty.clone(), self.pkg.clone(), arg.origin_ty.clone());
+                        let java = Java::from(java);
+                        method_body.push(toks!(java, " ", converted, " = ", arg.name.clone(), ";"));
                     }
                 }
+
+                // call native method
+                let mut tokens = Tokens::new();
+                let return_type = m.returns.clone(); 
+                match arg.ty {
+                    AstType::Void => {
+                        tokens.push(toks!("native_", method.name.clone(), "("));
+                    }
+                    _ => {
+                        tokens.push(toks!(return_type, " ret = native_", method.name.clone(), "("));
+                    }
+                }
+
             }
+            m.body = method_body;
+
             class.methods.push(m);
         }
 
@@ -185,38 +219,47 @@ impl<'a> TraitGen<'a> {
     }
 }
 
-impl From<AstType> for Java<'static> {
-    fn from(item: AstType) -> Self {
-        match item {
-            AstType::Boolean => java::BOOLEAN,
-            AstType::Byte => java::BYTE,
-            AstType::Int => java::INTEGER,
-            AstType::Long => java::LONG,
-            AstType::Float => java::FLOAT,
-            AstType::Double => java::DOUBLE,
-            AstType::String => java::imported("java.lang", "String"),
-            AstType::Vec(base) => AstType::from(base).to_array(),
-            AstType::Void => java::VOID,
-            AstType::Callback 
-            | AstType::Struct => panic!("not suppported") //TODO
-        }
-    }
+#[derive(Clone)]
+struct JavaType {
+    pub ast_type: AstType,
+    pub pkg: String,
+    pub origin_ty: String,
 }
 
-impl AstType {
-    fn to_array(&self) -> Java<'static> {
+impl JavaType {
+    pub(crate) fn new(ast_type: AstType, pkg: String, origin_ty: String) -> JavaType {
+        JavaType {
+            ast_type,
+            pkg,
+            origin_ty,
+        }
+    }
+
+    pub(crate) fn to_array(&self) -> Java<'static> {
         let base_name = Java::from(self.clone());
         self.to_java_array(base_name, false)
     }
 
-    fn to_boxed_array(&self) -> Java<'static> {
+    pub(crate) fn to_boxed_array(&self) -> Java<'static> {
         let base_name = Java::from(self.clone());
-        self.to_java_array(base_name, true) 
+        self.to_java_array(base_name, true)
     }
 
-    fn to_struct_array<'a>(&self, pkg: &'a str, struct_name: &'a str) -> Java<'static> {
-        let base_name = imported(pkg.to_owned(), struct_name.to_owned());
-        self.to_java_array(base_name, false)
+    pub(crate) fn to_transfer(&self) -> Java<'static> {
+        match self.ast_type {
+            AstType::Boolean => java::INTEGER,
+            AstType::Vec(base) => {
+                match base {
+                    AstBaseType::Byte => {
+                        Java::from(self.clone())
+                    }
+                    _ => {
+                        Java::from(JavaType::new(self.ast_type, self.pkg.clone(), self.origin_ty.clone()))
+                    }
+                }
+            }
+            _ => Java::from(self.clone()),
+        }
     }
 
     fn to_java_array(&self, java: Java<'static>, boxed: bool) -> Java<'static> {
@@ -224,11 +267,48 @@ impl AstType {
         {
             let mut formatter = Formatter::new(&mut base_str);
             let mut extra = java::Extra::default();
-            let level = if boxed {1} else {0};
+            let level = if boxed { 1 } else { 0 };
             let _ = java.format(&mut formatter, &mut extra, level);
         }
         let _ = base_str.write_str("[]");
-        java::local(base_str) 
+        java::local(base_str)
+    }
+}
+
+impl From<JavaType> for Java<'static> {
+    fn from(item: JavaType) -> Self {
+        match item.ast_type {
+            AstType::Boolean => java::BOOLEAN,
+            AstType::Byte => java::BYTE,
+            AstType::Int => java::INTEGER,
+            AstType::Long => java::LONG,
+            AstType::Float => java::FLOAT,
+            AstType::Double => java::DOUBLE,
+            AstType::String => java::imported("java.lang", "String"),
+            AstType::Vec(base) => match base {
+                AstBaseType::Struct => {
+                    let sub_origin_ty = item.origin_ty.replace("Vec<", "").replace(">", "");
+                    JavaType::new(AstType::from(base), item.pkg.clone(), sub_origin_ty.clone())
+                        .to_array()
+                }
+                AstBaseType::Byte => JavaType::new(
+                    AstType::from(base),
+                    item.pkg.clone(),
+                    item.origin_ty.clone(),
+                )
+                .to_array(),
+                _ => JavaType::new(
+                    AstType::from(base),
+                    item.pkg.clone(),
+                    item.origin_ty.clone(),
+                )
+                .to_boxed_array(),
+            },
+            AstType::Void => java::VOID,
+            AstType::Callback | AstType::Struct => {
+                java::imported(item.pkg.clone(), item.origin_ty.clone())
+            }
+        }
     }
 }
 
@@ -239,6 +319,6 @@ fn to_java_file(pkg: &str, tokens: Tokens<Java>) -> Result<String> {
         let mut extra = java::Extra::default();
         extra.package(pkg.as_ref());
         java::Java::write_file(tokens, &mut formatter, &mut extra, 0)?;
-    } 
+    }
     Ok(buf)
 }

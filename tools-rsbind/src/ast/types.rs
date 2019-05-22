@@ -27,7 +27,10 @@ impl<'a> From<&'a str> for AstBaseType {
             "u64" | "i64" => AstBaseType::Long,
             "str" | "String" => AstBaseType::String,
             "bool" => AstBaseType::Boolean,
+            // Right now, all callbacks are wrapped with Box
             "Box" => AstBaseType::Callback,
+            // If the ident can't recognized, we assume it is a struct, 
+            // but if we add enum support, it should be changed.
             _ => AstBaseType::Struct,
         }
     }
@@ -67,7 +70,10 @@ impl<'a> From<&'a str> for AstType {
             "u64" | "i64" => AstType::Long,
             "str" | "String" => AstType::String,
             "bool" => AstType::Boolean,
+            // Right now, all callbacks are wrapped with Box
             "Box" => AstType::Callback,
+            // If the ident can't recognized, we assume it is a struct, 
+            // but if we add enum support, it should be changed.
             _ => AstType::Struct,
         }
     }

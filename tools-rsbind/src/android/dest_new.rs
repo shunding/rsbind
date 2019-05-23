@@ -129,14 +129,16 @@ impl<'a> TraitGen<'a> {
         for method in methods {
             let mut m = java::Method::new(method.name.clone());
             m.modifiers = vec![Modifier::Public, Modifier::Static];
-            m.returns = Java::from(JavaType::new(
+            
+            let return_ty = JavaType::new(
                 method.return_type.clone(),
                 self.pkg.clone(),
                 method.origin_return_ty.clone(),
-            ));
+            );
+            m.returns = Java::from(return_ty.clone());
 
             let mut method_body: Tokens<Java> = Tokens::new();
-            for arg in method.args.into_iter() {
+            for arg in method.args.clone().into_iter() {
                 // Add arguments
                 match arg.ty {
                     AstType::Void => (),
@@ -163,8 +165,10 @@ impl<'a> TraitGen<'a> {
                     }
                     _ => (),
                 }
-
-                // Argument convert
+            }
+            
+            // Argument convert
+            for arg in method.args.clone().into_iter() {
                 let converted = format!("r_{}", &arg.name);
                 match arg.ty {
                     AstType::Void => (),
@@ -196,20 +200,49 @@ impl<'a> TraitGen<'a> {
                         method_body.push(toks!(java, " ", converted, " = ", arg.name.clone(), ";"));
                     }
                 }
+            }
 
-                // call native method
-                let mut tokens = Tokens::new();
-                let return_type = m.returns.clone(); 
-                match arg.ty {
-                    AstType::Void => {
-                        tokens.push(toks!("native_", method.name.clone(), "("));
-                    }
-                    _ => {
-                        tokens.push(toks!(return_type, " ret = native_", method.name.clone(), "("));
+            // Call native method
+            let return_java_ty = m.returns.clone(); 
+            match return_ty.ast_type.clone() {
+                AstType::Void => {
+                    method_body.push(toks!("native_", method.name.clone(), "("));
+                }
+                _ => {
+                    method_body.push(toks!(return_java_ty, " ret = native_", method.name.clone(), "("));
+                }
+            }
+
+            for (index, item) in method.args.clone().into_iter().enumerate() {
+                let converted = format!("r_{}", &item.name);
+                if index == method.args.len() - 1 {
+                    method_body.append(toks!(converted));
+                } else {
+                    method_body.append(toks!(converted, ", "));
+                }
+            }
+            method_body.append(toks!(");"));
+
+            // Return type convert
+            match return_ty.ast_type.clone() {
+                AstType::Void => (),
+                AstType::Vec(base) => {
+                    match base {
+                        AstBaseType::Byte => {
+                            method_body.push(toks!("return ret;"));
+                        }
+                        _ => {
+                            let sub_ty = return_ty.clone().get_base_ty();
+                            let json = java::imported("com.alibaba.fastjson", "JSON");
+                            let list_type = java::imported("java.util", "List").with_arguments(vec![sub_ty]);
+                            method_body.push(toks!(list_type, " list = ", json, ".parseArray(ret, ", sub_ty.clone(), ".class;"));
+                            method_body.push(toks!(return_ty.clone().to_array(), " array = new ", sub_ty, "[list.size()];"));
+                            mothod_body.push(toks!("return list.toArray(array);"));
+                        }
                     }
                 }
-
             }
+
             m.body = method_body;
 
             class.methods.push(m);
@@ -261,6 +294,24 @@ impl JavaType {
             _ => Java::from(self.clone()),
         }
     }
+    
+    /// If JavaType is an Vec(base), we will return base, else we will return itself.
+    pub(crate) fn get_base_ty(&self) -> Java<'static> {
+        match self.ast_type {
+            AstType::Vec(base) => {
+                match base {
+                    AstBaseType::Struct => {
+                        let sub_origin_ty = self.origin_ty.replace("Vec<", "").replace(">", "");
+                        java::imported(self.pkg.clone(), sub_origin_ty)
+                    }
+                    _ => Java::from(JavaType::new(AstType::from(base), self.pkg.clone(), self.origin_ty.clone()))
+                }
+            }
+            _ => {
+                Java::from(self.clone())
+            }
+        }
+    }
 
     fn to_java_array(&self, java: Java<'static>, boxed: bool) -> Java<'static> {
         let mut base_str = String::new();
@@ -291,12 +342,15 @@ impl From<JavaType> for Java<'static> {
                     JavaType::new(AstType::from(base), item.pkg.clone(), sub_origin_ty.clone())
                         .to_array()
                 }
+                // Byte array is not transferred by json, so we don't use boxed array.
                 AstBaseType::Byte => JavaType::new(
                     AstType::from(base),
                     item.pkg.clone(),
                     item.origin_ty.clone(),
                 )
                 .to_array(),
+                // Why we use boxed array, because we use json to transfer array, 
+                // and it is translated to list, and then we need to change it to array(boxed).
                 _ => JavaType::new(
                     AstType::from(base),
                     item.pkg.clone(),

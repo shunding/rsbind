@@ -29,7 +29,7 @@ impl<'a> From<&'a str> for AstBaseType {
             "bool" => AstBaseType::Boolean,
             // Right now, all callbacks are wrapped with Box
             "Box" => AstBaseType::Callback,
-            // If the ident can't recognized, we assume it is a struct, 
+            // If the ident can't recognized, we assume it is a struct,
             // but if we add enum support, it should be changed.
             _ => AstBaseType::Struct,
         }
@@ -72,7 +72,7 @@ impl<'a> From<&'a str> for AstType {
             "bool" => AstType::Boolean,
             // Right now, all callbacks are wrapped with Box
             "Box" => AstType::Callback,
-            // If the ident can't recognized, we assume it is a struct, 
+            // If the ident can't recognized, we assume it is a struct,
             // but if we add enum support, it should be changed.
             _ => AstType::Struct,
         }

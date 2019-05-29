@@ -1,14 +1,14 @@
 use super::dest;
 use super::dest_new::StructGen;
 use ast::AstResult;
-use bridges::BridgeGen::JavaGen;
 use bridge::prj::Unpack;
-use process::BuildProcess;
+use bridges::BridgeGen::JavaGen;
 use config::Config as BuildConfig;
 use errors::ErrorKind::*;
 use errors::*;
 use fs_extra;
 use fs_extra::dir::CopyOptions;
+use process::BuildProcess;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};
@@ -256,7 +256,7 @@ impl<'a> BuildProcess for AndroidProcess<'a> {
             for struct_desc in struct_descs.iter() {
                 let gen = StructGen {
                     desc: struct_desc,
-                    pkg: self.namespace()
+                    pkg: self.namespace(),
                 };
 
                 let struct_str = gen.gen().unwrap();
@@ -266,16 +266,25 @@ impl<'a> BuildProcess for AndroidProcess<'a> {
 
         use super::dest_new::CallbackGen;
         use super::dest_new::TraitGen;
+
+        let mut callbacks = vec![];
+        for desc in self.ast_result.trait_descs.iter() {
+            let descs = desc.1;
+            for each in descs.iter() {
+                callbacks.push(each.clone());
+            }
+        }
+
         for desc in self.ast_result.trait_descs.iter() {
             let descs = desc.1;
             for each in descs.iter() {
                 if !each.is_callback {
-                    let gen = TraitGen{
+                    let gen = TraitGen {
                         desc: each,
                         pkg: self.namespace(),
                         so_name: "ffi.so".to_owned(),
                         ext_libs: "xxxx.so".to_owned(),
-                        callbacks: vec![]
+                        callbacks: callbacks.clone(),
                     };
                     let strs = gen.gen().unwrap();
                     println!("{}", strs);
@@ -284,13 +293,13 @@ impl<'a> BuildProcess for AndroidProcess<'a> {
 
                 let gen = CallbackGen {
                     desc: each,
-                    pkg: self.namespace()
+                    pkg: self.namespace(),
                 };
 
                 let callback_str = gen.gen();
                 match callback_str {
                     Ok(str) => println!("{}", str),
-                    Err(err) => println!("{}", err)
+                    Err(err) => println!("{}", err),
                 }
             }
         }

@@ -236,6 +236,7 @@ impl Bind {
             crate_name,
             ast_result,
             config,
+            ast_result
         );
 
         match self.action {

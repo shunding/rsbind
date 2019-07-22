@@ -27,15 +27,15 @@ mod ios;
 mod process;
 mod unzip;
 
+use android::config::Android;
 use android::process::AndroidProcess;
 use ast::AstResult;
 use errors::*;
+use ios::config::Ios;
 use ios::process::IosProcess;
 use process::*;
 use std::fs;
 use std::path::PathBuf;
-use android::config::Android;
-use ios::config::Ios;
 
 const GEN_DIR_NAME: &str = "_gen";
 const HEADER_NAME: &str = "header";
@@ -188,7 +188,7 @@ impl Bind {
     ) -> Result<()> {
         let ios = match config {
             Some(ref config) => config.ios.clone(),
-            None => Some(Ios::default())
+            None => Some(Ios::default()),
         };
 
         let ios_process = IosProcess::new(
@@ -236,19 +236,16 @@ impl Bind {
     ) -> Result<()> {
         let android = match config {
             Some(ref config) => config.android.clone(),
-            None => Some(Android::default())
+            None => Some(Android::default()),
         };
 
         let android_process = AndroidProcess::new(
             &self.prj_path,
             &self.android_dest_path,
             &self.android_bridge_path,
-            &self.ast_path,
-            &self.bin_path,
             crate_name,
             ast_result,
             android,
-            ast_result
         );
 
         match self.action {

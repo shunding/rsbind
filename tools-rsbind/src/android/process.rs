@@ -1,7 +1,8 @@
+use super::config::Android;
+use android::dest::JavaCodeGen;
 use ast::AstResult;
 use bridge::prj::Unpack;
 use bridges::BridgeGen::JavaGen;
-use android::dest::JavaCodeGen;
 use errors::ErrorKind::*;
 use errors::*;
 use fs_extra;
@@ -13,7 +14,6 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::Command;
 use unzip;
-use super::config::Android;
 
 const MAGIC_NUM: &'static str = "*521%";
 
@@ -21,12 +21,9 @@ pub(crate) struct AndroidProcess<'a> {
     origin_prj_path: &'a PathBuf,
     dest_prj_path: &'a PathBuf,
     bridge_prj_path: &'a PathBuf,
-    ast_path: &'a PathBuf,
-    bin_path: &'a PathBuf,
     host_crate_name: &'a str,
     ast_result: &'a AstResult,
     config: Option<Android>,
-    ast: &'a AstResult
 }
 
 impl<'a> AndroidProcess<'a> {
@@ -34,23 +31,17 @@ impl<'a> AndroidProcess<'a> {
         origin_prj_path: &'a PathBuf,
         dest_prj_path: &'a PathBuf,
         bridge_prj_path: &'a PathBuf,
-        ast_path: &'a PathBuf,
-        bin_path: &'a PathBuf,
         host_crate_name: &'a str,
         ast_result: &'a AstResult,
         config: Option<Android>,
-        ast: &'a AstResult
     ) -> Self {
         AndroidProcess {
             origin_prj_path,
             dest_prj_path,
             bridge_prj_path,
-            ast_path,
-            bin_path,
             host_crate_name,
             ast_result,
-            config,
-            ast
+            config
         }
     }
 }
@@ -62,11 +53,11 @@ impl<'a> AndroidProcess<'a> {
             &self.host_crate_name.replace("-", "_")
         )
     }
-    
+
     fn config(&self) -> Android {
         match self.config {
             Some(ref config) => config.to_owned(),
-            None => Android::default()
+            None => Android::default(),
         }
     }
 }
@@ -275,8 +266,10 @@ impl<'a> BuildProcess for AndroidProcess<'a> {
                     e
                 ))
             })?;
-            let replaced =
-                manifest_text.replace(&format!("$({}-namespace)", MAGIC_NUM), &self.config().namespace());
+            let replaced = manifest_text.replace(
+                &format!("$({}-namespace)", MAGIC_NUM),
+                &self.config().namespace(),
+            );
             fs::write(manifest_path, replaced).map_err(|e| {
                 FileError(format!(
                     "write android dest project AndroidManifest  error {:?}",
@@ -295,19 +288,21 @@ impl<'a> BuildProcess for AndroidProcess<'a> {
             fs::remove_dir_all(&java_gen_path)?;
         }
         fs::create_dir_all(&java_gen_path)?;
-        
-        JavaCodeGen{
+
+        JavaCodeGen {
             origin_prj: self.origin_prj_path,
             java_gen_dir: &java_gen_path,
             ast: &self.ast_result,
             namespace: self.config().namespace(),
             so_name: self.config().so_name(),
-            ext_libs: self.config().ext_libs()
-        }.gen_java_code()?;
+            ext_libs: self.config().ext_libs(),
+        }
+        .gen_java_code()?;
 
         // get the output dir string
         println!("get output dir string");
-        let mut output_dir = self.dest_prj_path
+        let mut output_dir = self
+            .dest_prj_path
             .join("rustlib")
             .join("src")
             .join("main")
@@ -320,7 +315,7 @@ impl<'a> BuildProcess for AndroidProcess<'a> {
         let namespace = self.config().namespace();
         let pkg_split = namespace.split(".").collect::<Vec<&str>>();
         for pkg_part in pkg_split.iter() {
-           output_dir = output_dir.join(pkg_part);
+            output_dir = output_dir.join(pkg_part);
         }
 
         let options = CopyOptions {

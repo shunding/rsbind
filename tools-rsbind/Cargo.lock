@@ -177,8 +177,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "genco"
-version = "0.3.29"
-source = "git+https://github.com/sidneywang/genco#cdbfa21de7a8fd3e0de8412a4b475ecb62f6bd00"
+version = "0.3.30"
+source = "git+https://github.com/shunding/genco#55e44606f2980c1c7ddc4498e5e7e7555a80fa84"
 
 [[package]]
 name = "getrandom"
@@ -352,7 +352,7 @@ dependencies = [
  "cbindgen 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "error-chain 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "fs_extra 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "genco 0.3.29 (git+https://github.com/sidneywang/genco)",
+ "genco 0.3.30 (git+https://github.com/shunding/genco)",
  "jni 0.12.3 (git+https://github.com/prevoty/jni-rs)",
  "proc-macro2 0.4.30 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 0.6.12 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -590,7 +590,7 @@ dependencies = [
 "checksum either 1.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "5527cfe0d098f36e3f8839852688e63c8fff1c90b2b405aef730615f9a7bcf7b"
 "checksum error-chain 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)" = "3ab49e9dcb602294bc42f9a7dfc9bc6e936fca4418ea300dbfb84fe16de0b7d9"
 "checksum fs_extra 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "5f2a4a2034423744d2cc7ca2068453168dcdb82c438419e639a26bd87839c674"
-"checksum genco 0.3.29 (git+https://github.com/sidneywang/genco)" = "<none>"
+"checksum genco 0.3.30 (git+https://github.com/shunding/genco)" = "<none>"
 "checksum getrandom 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "e65cce4e5084b14874c4e7097f38cab54f47ee554f9194673456ea379dcc4c55"
 "checksum itoa 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "501266b7edd0174f8530248f87f99c88fbe60ca4ef3dd486835b8d8d53136f7f"
 "checksum jni 0.12.3 (git+https://github.com/prevoty/jni-rs)" = "<none>"
